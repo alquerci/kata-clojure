@@ -1,0 +1,106 @@
+#! /bin/sh -eu
+
+me=$0
+medir=`dirname "$me"`
+
+displayHelpMessage () {
+    cat >&2 <<EOF
+
+$0 <package_name> <ClassName>
+
+EOF
+}
+
+${1+:} false || {
+    displayHelpMessage
+
+    exit 2
+}
+
+${2+:} false || {
+    displayHelpMessage
+
+    exit 2
+}
+
+pkgdir=`realpath "${medir}/.."`
+srcdir="${pkgdir}/src"
+testsdir="${pkgdir}/src/Tests"
+
+defaultclassname=Acme
+codefileext=clj
+GIT=git
+SED=sed
+
+pkgname=$1
+classname=$2
+
+main ()
+{
+    createNewBranch
+
+    configureClassName
+
+    removeSkeletonArtefact
+    commit
+
+    echo
+    echo "Open ${testsdir}/${classname}.${codefileext}"
+    echo
+    echo "And start coding"
+    echo
+}
+
+createNewBranch ()
+{
+    checkWorkingTree
+
+    nowday=`date '+%F_%T' | tr : -`
+
+    git checkout -b "${nowday}_${pkgname}"
+}
+
+configureClassName ()
+{
+    sed -i "s/${defaultclassname}/${classname}/" \
+        "${testsdir}/${defaultclassname}Test.${codefileext}"
+
+    mv "${testsdir}/${defaultclassname}Test.${codefileext}" \
+       "${testsdir}/${classname}Test.${codefileext}"
+}
+
+removeSkeletonArtefact ()
+{
+    git rm $me
+}
+
+commit ()
+{
+    git add \
+        "${pkgdir}/${pkgmanagerlockfile}" \
+        "${testsdir}/${classname}Test.${codefileext}"
+
+    git rm --cached "${testsdir}/${defaultclassname}Test.${codefileext}"
+
+    git commit -pm"Add ${pkgname}"
+}
+
+checkWorkingTree()
+{
+    ${GIT} update-index --refresh > /dev/null || :
+
+    test x = x"`${GIT} diff-index --name-only HEAD --`" || {
+        echo >&2
+        echo >&2 '    The working tree is dirty.'
+        echo >&2 '    Please stash or deal with modifications to proceed:'
+        echo >&2
+        {
+            ${GIT} diff-index --name-only HEAD -- | ${SED} -e 's,^,        ,'
+        } >&2
+        echo >&2
+
+        return 3
+    }
+}
+
+main
